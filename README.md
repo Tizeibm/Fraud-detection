@@ -759,7 +759,7 @@ THRESHOLD = 0.01
 ## Contact et Support
 
 Pour toute question ou suggestion:
-- **GitHub Issues**: git@github.com/Tizeibm/Fraud-detection.git
+- **GitHub Issues**: github.com/Tizeibm/Fraud-detection.git
 - **Email**: tizeAhmed750@gmail.com
 - **Documentation**: Ce fichier README.md
 
