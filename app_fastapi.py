@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+import shap
 from pydantic import BaseModel
 import pandas as pd
 import joblib
@@ -8,6 +9,7 @@ import os
 # Configuration
 MODEL_PATH = "fraud_model_xgboost.pkl"
 METADATA_PATH = "model_metadata.pkl"
+TOP_K_REASONS = 5
 
 app = FastAPI(title="Fraud Detection API", version="1.0")
 
@@ -16,9 +18,17 @@ try:
     model = joblib.load(MODEL_PATH)
     metadata = joblib.load(METADATA_PATH)
     THRESHOLD = metadata.get('threshold', 0.5)
-    print(f"Model loaded. Threshold set to {THRESHOLD}")
+
+    #Components extraction
+    preprocessor = model.named_steps["preprocessor"]
+    classifier = model.named_steps["classifier"]
+
+    #SHAP explainer initialisation
+    explainer = shap.TreeExplainer(classifier)
+    print("✅ Modèle chargé avec succès")
+
 except Exception as e:
-    print(f"Error loading model: {e}")
+    print(f"❌ Erreur chargement modèle : {e}")
     model = None
     metadata = {}
 
@@ -55,23 +65,46 @@ def health_check():
 def predict(transaction: TransactionInput):
     if not model:
         raise HTTPException(status_code=503, detail="Model not loaded")
-    
+
     try:
         # Convert input to DataFrame
-        data = transaction.dict()
-        df = pd.DataFrame([data])
-        
+        df = pd.DataFrame([transaction.model_dump()])
+
         # Predict probability
         proba = model.predict_proba(df)[0][1]
-        
-        # Determine fraud status based on threshold
         is_fraud = bool(proba >= THRESHOLD)
-        
+
+        #Preprocessing
+        X_transformed = preprocessor.transform(df)
+
+        #SHAP values
+        shap_values = explainer.shap_values(X_transformed)[0]
+
+        features_names = preprocessor.get_feature_names_out()
+        contributions = dict(zip(features_names, shap_values))
+
+
+        top_reasons = sorted(
+            contributions.items(),
+            key=lambda x: abs(x[1]),
+            reverse=True
+        )[:TOP_K_REASONS]
+
+        reasons = [
+            {
+                "feature": feature,
+                "impact": round(float(value), 4),
+                "direction": "increase_risk" if value > 0 else "decrease_risk"
+            }
+            for feature, value in top_reasons
+        ]
+
         return {
-            "fraud_probability": float(proba),
+            "fraud_probability": round(float(proba), 4),
             "is_fraud": is_fraud,
             "threshold_used": float(THRESHOLD),
-            "risk_level": "High" if proba > 0.8 else "Medium" if proba > 0.4 else "Low"
+            "risk_level": "High" if proba > 0.8 else "Medium" if proba > 0.4 else "Low",
+            "reasons": reasons
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

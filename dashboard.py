@@ -11,13 +11,13 @@ API_URL = "http://localhost:8000/predict"
 DATA_PATH = "fraud_dataset_realistic_200k.csv"
 MODEL_METADATA_PATH = "model_metadata.pkl"
 
-st.set_page_config(page_title="Fraud Detection Dashboard", layout="wide")
+st.set_page_config(page_title="Détection de Fraude Bancaire", layout="wide")
 
-st.title("🛡️ Advanced Fraud Detection System")
+st.title("🛡️ Système Détection de Fraude")
 
-# Sidebar
+# Barre latérale
 st.sidebar.header("Navigation")
-page = st.sidebar.radio("Go to", ["Overview", "Real-time Inference", "Model Insights"])
+page = st.sidebar.radio("Aller à", ["Vue d'ensemble", "Inférence Temps Réel", "Performance du Modèle"])
 
 @st.cache_data
 def load_data():
@@ -30,96 +30,133 @@ def load_metadata():
     except:
         return None
 
-if page == "Overview":
-    st.header("Dataset Overview")
+if page == "Vue d'ensemble":
+    st.header("Aperçu du Dataset")
     df = load_data()
-    
+
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total Transactions", f"{len(df):,}")
-    col2.metric("Fraud Cases", f"{df['label_is_fraud'].sum():,}")
-    col3.metric("Fraud Rate", f"{df['label_is_fraud'].mean()*100:.2f}%")
-    
-    st.subheader("Fraud by Category")
-    fig = px.bar(df.groupby('merchant_category')['label_is_fraud'].mean().reset_index(), 
-                 x='merchant_category', y='label_is_fraud', 
-                 title="Fraud Rate by Merchant Category")
+    col1.metric("Total des Transactions", f"{len(df):,}")
+    col2.metric("Cas de Fraude", f"{df['label_is_fraud'].sum():,}")
+    col3.metric("Taux de Fraude", f"{df['label_is_fraud'].mean()*100:.2f}%")
+
+    st.subheader("Fraude par Catégorie")
+    fig = px.bar(df.groupby('merchant_category')['label_is_fraud'].mean().reset_index(),
+                 x='merchant_category', y='label_is_fraud',
+                 title="Taux de Fraude par Catégorie de Marchand")
     st.plotly_chart(fig, use_container_width=True)
 
-elif page == "Real-time Inference":
-    st.header("Test Transaction")
-    
+elif page == "Inférence Temps Réel":
+    st.header("Tester une Transaction")
+
     with st.form("prediction_form"):
         col1, col2 = st.columns(2)
-        
+
         with col1:
-            amount = st.number_input("Amount", min_value=0.0, value=100.0)
-            merchant_category = st.selectbox("Merchant Category", ["electronics", "travel", "grocery", "fashion", "entertainment"])
-            transaction_hour = st.slider("Hour of Day", 0, 23, 12)
-            is_foreign = st.selectbox("Is Foreign Transaction?", [0, 1])
+            amount = st.number_input("Montant", min_value=0.0, value=100.0)
+            merchant_category = st.selectbox("Catégorie du Marchand", ["electronics", "travel", "grocery", "fashion", "entertainment"])
+            transaction_hour = st.slider("Heure de la Journée", 0, 23, 12)
+            is_foreign = st.selectbox("Transaction à l'Étranger ?", ['Oui', 'Non'])
+            if is_foreign == 'Oui':
+                is_foreign = 1
+            else:
+                is_foreign = 0
+            card_type = st.selectbox("Type de carte", ['Visa', 'Mastercard', 'Amex', 'Discover'])
             
+
         with col2:
-            age = st.number_input("Customer Age", 18, 100, 30)
-            device = st.selectbox("Device", ["mobile", "desktop", "tablet"])
-            distance_from_home = st.number_input("Distance from Home (km)", 0.0, 10000.0, 10.0) # Placeholder if not in input
-            
-        # Hidden/Default fields for simplicity in this demo form
-        # In a real app, these would be populated or computed
-        submit = st.form_submit_button("Analyze Transaction")
-        
+            age = st.number_input("Âge du Client", 18, 100, 30)
+            device = st.selectbox("Appareil", ["mobile", "desktop", "tablet"])
+            balance = st.number_input("Solde compte", 0.0, 100000.0, 2000.0)
+            #transaction_type = st.selectbox("Type de transaction", ['En ligne', 'Bancaire'])
+            #if transaction_type == 'En ligne':
+            #    transaction_type = "online"
+            #else:
+            #    transaction_type = "in_store"
+        # Champs cachés/par défaut pour simplifier ce formulaire de démo
+        # Dans une vraie application, ces valeurs seraient calculées ou récupérées
+            last_transaction_hour = st.number_input("Nombre de transcation il y a une heure", 0, 10000, 0)
+            previous_transactions_24h = st.number_input("Nombre de transcation il y a 24H", 0, 10000, 0)
+
+        submit = st.form_submit_button("Analyser la Transaction")
+
         if submit:
-            # Construct payload matching API expectation
-            # Note: We need to match the exact schema of TransactionInput in app_fastapi.py
-            # For this demo, we'll mock the missing fields with average/default values
+            # Construction de la requête correspondant aux attentes de l'API
+            # Note : Nous devons correspondre au schéma exact de TransactionInput dans app_fastapi.py
+            # Pour cette démo, nous simulons les champs manquants avec des valeurs moyennes/par défaut
             payload = {
                 "transaction_hour": transaction_hour,
-                "day_of_week": 0, # Default
+                "day_of_week": 0, # Par défaut
                 "age": age,
-                "gender": "M", # Default
+                "gender": "M", # Par défaut
                 "home_country": "US",
-                "transaction_country": "US" if is_foreign == 0 else "FR",
+                "transaction_country": "CMR" if is_foreign == 0 else "US",
                 "merchant_category": merchant_category,
-                "merchant_base_risk": 0.1, # Default
-                "transaction_type": "online",
-                "card_type": "Visa",
+                "merchant_base_risk": 0.1, # Par défaut
+                "transaction_type": 'online',
+                "card_type": card_type,
                 "device": device,
                 "amount": amount,
-                "avg_30d_amount": 50.0, # Default
-                "previous_transactions_24h": 1,
-                "last_hour_transactions": 0,
-                "balance": 1000.0,
+                "avg_30d_amount": 100.0, # Par défaut
+                "previous_transactions_24h": previous_transactions_24h,
+                "last_hour_transactions": last_transaction_hour,
+                "balance": balance,
                 "ip_risk_score": 0.5,
                 "is_foreign": is_foreign,
                 "device_mismatch": 0,
                 "location_change": 0,
-                "amount_anomaly": 0.0,
+                "amount_anomaly": 0.3,
                 "hour_anomaly": 0
             }
-            
+
             try:
                 response = requests.post(API_URL, json=payload)
                 if response.status_code == 200:
                     result = response.json()
-                    st.success("Analysis Complete")
-                    
-                    col_res1, col_res2 = st.columns(2)
-                    col_res1.metric("Fraud Probability", f"{result['fraud_probability']:.2%}")
-                    col_res2.metric("Risk Level", result['risk_level'])
-                    
-                    if result['is_fraud']:
-                        st.error("🚨 FRAUD DETECTED")
-                    else:
-                        st.success("✅ Transaction Safe")
-                else:
-                    st.error(f"API Error: {response.text}")
-            except Exception as e:
-                st.error(f"Connection Error: {e}")
-                st.info("Make sure the API is running: `uvicorn app_fastapi:app --reload`")
+                    st.success("Analyse Terminée")
 
-elif page == "Model Insights":
-    st.header("Model Performance")
+                    col_res1, col_res2 = st.columns(2)
+                    col_res1.metric("Probabilité de Fraude", f"{result['fraud_probability']:.2%}")
+                    col_res2.metric("Niveau de Risque", result['risk_level'])
+
+                    if result['is_fraud']:
+                        st.error("🚨 FRAUDE DÉTECTÉE")
+                    else:
+                        st.success("✅ Transaction Sûre")
+
+                    #Raisons
+                    st.subheader("Raisons principales de la decision")
+
+                    reason_df = pd.DataFrame(result["reasons"])
+                    reason_df["impact_abs"] = reason_df["impact"].abs()
+
+                    fig = px.bar(
+                        reason_df,
+                        x="impact_abs",
+                        y="feature",
+                        orientation="h",
+                        color="direction",
+                        title="Facteurs influençant la decision"
+                    )
+
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    for r in result["reasons"]:
+                        st.write(
+                            f"- **{r['feature']}** →"
+                            f"{'augmente' if r['direction']=='increase_risk' else 'réduit'} le risque"
+                            f"(impact = {abs(r['impact'])})"
+                        )
+                else:
+                    st.error(f"Erreur API : {response.text}")
+            except Exception as e:
+                st.error(f"Erreur de Connexion : {e}")
+                st.info("Assurez-vous que l'API est en cours d'exécution : `uvicorn app_fastapi:app --reload`")
+
+elif page == "Performance du Modèle":
+    st.header("Performance du Modèle")
     metadata = load_metadata()
     if metadata:
-        st.write(f"**Optimal Threshold:** {metadata.get('threshold', 'N/A')}")
-        st.write(f"**Features Used:** {len(metadata.get('numerical_cols', [])) + len(metadata.get('categorical_cols', []))}")
+        st.write(f"**Seuil Optimal :** {metadata.get('threshold', 'N/A')}")
+        st.write(f"**Features Utilisées :** {len(metadata.get('numerical_cols', [])) + len(metadata.get('categorical_cols', []))}")
     else:
-        st.warning("Model metadata not found. Please train the model first.")
+        st.warning("Métadonnées du modèle introuvables. Veuillez d'abord entraîner le modèle.")
